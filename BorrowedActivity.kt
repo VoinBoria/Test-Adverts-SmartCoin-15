@@ -189,10 +189,21 @@ class BorrowedActivity : ComponentActivity() {
 @Composable
 fun RepayBorrowedTransactionDialog(
     onDismiss: () -> Unit,
-    onRepay: (Double) -> Unit,
+    onRepay: (Double, String) -> Unit, // Додано строку для дати повернення
     transactionToRepay: BorrowedTransaction
 ) {
     var repaymentAmount by remember { mutableStateOf("") }
+    var repaymentDate by remember { mutableStateOf(getCurrentDateForBorrowed()) } // Стан для дати повернення
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    if (showDatePicker) {
+        BorrowedDatePickerDialog(
+            onDateSelected = { selectedDate ->
+                repaymentDate = selectedDate
+                showDatePicker = false
+            }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -219,6 +230,19 @@ fun RepayBorrowedTransactionDialog(
                         containerColor = Color.Transparent
                     )
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(id = R.string.repayment_date),
+                    style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                OutlinedButton(
+                    onClick = { showDatePicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                ) {
+                    Text(text = repaymentDate, style = TextStyle(color = Color.White))
+                }
             }
         },
         confirmButton = {
@@ -226,7 +250,7 @@ fun RepayBorrowedTransactionDialog(
                 onClick = {
                     val repaymentAmountValue = repaymentAmount.toDoubleOrNull()
                     if (repaymentAmountValue != null) {
-                        onRepay(repaymentAmountValue)
+                        onRepay(repaymentAmountValue, repaymentDate) // Передача обраної дати повернення
                         onDismiss()
                     }
                 },
@@ -338,8 +362,8 @@ fun BorrowedScreen(
             transactionToRepay?.let { transaction ->
                 RepayBorrowedTransactionDialog(
                     onDismiss = { transactionToRepay = null },
-                    onRepay = { repaymentAmount ->
-                        viewModel.repayBorrowedTransaction(transaction, repaymentAmount)
+                    onRepay = { repaymentAmount, repaymentDate -> // Передаємо два параметри
+                        viewModel.repayBorrowedTransaction(transaction, repaymentAmount, repaymentDate)
                         transactionToRepay = null
                     },
                     transactionToRepay = transaction
@@ -633,11 +657,11 @@ class BorrowedViewModel(application: Application) : AndroidViewModel(application
         saveTransactions(getApplication())
     }
 
-    fun repayBorrowedTransaction(transaction: BorrowedTransaction, repaymentAmount: Double) {
+    fun repayBorrowedTransaction(transaction: BorrowedTransaction, repaymentAmount: Double, repaymentDate: String) {
         _transactions.update { currentList ->
-            currentList.map {
+            currentList.map { it: BorrowedTransaction ->
                 if (it.id == transaction.id)
-                    it.copy(amount = (it.amount - repaymentAmount).coerceAtLeast(0.0))
+                    it.copy(amount = (it.amount - repaymentAmount).coerceAtLeast(0.0), comment = "${it.comment}\nRepayment of $repaymentAmount on $repaymentDate")
                 else
                     it
             }
