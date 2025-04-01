@@ -90,12 +90,12 @@ class BudgetPlanningActivity : ComponentActivity() {
     }
 
     private fun getSelectedLanguage(context: Context): String {
-        val sharedPreferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        val sharedPreferences = context.getSharedPreferences("settings", MODE_PRIVATE)
         return sharedPreferences.getString("language", "UK") ?: "UK"
     }
 
     private fun getSelectedCurrency(context: Context): String {
-        val sharedPreferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        val sharedPreferences = context.getSharedPreferences("settings", MODE_PRIVATE)
         return sharedPreferences.getString("currency", "UAH") ?: "UAH"
     }
 
@@ -664,11 +664,14 @@ fun AddGoalDialog(
     val localContext = LocalContext.current
     val scrollState = rememberScrollState()
     var showGoalAmountInput by remember { mutableStateOf(false) }
-    var savingFrequency by remember { mutableStateOf("день") }
+    val perDay = stringResource(id = R.string.per_day)
+    val perWeek = stringResource(id = R.string.per_week)
+    val perMonth = stringResource(id = R.string.per_month)
+    val perYear = stringResource(id = R.string.per_year)
+    val frequencies = listOf(perDay, perWeek, perMonth, perYear)
+    var savingFrequency by remember { mutableStateOf(perDay) }
     var calculatedSaving by remember { mutableStateOf(0.0) }
     var expanded by remember { mutableStateOf(false) }
-
-    val frequencies = listOf("день", "тиждень", "місяць", "рік")
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
@@ -745,51 +748,48 @@ fun AddGoalDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 Divider(color = Color.Gray)
                 Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(id = R.string.savings_needed),
+                    style = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
+                )
                 Row(
                     verticalAlignment = Alignment.CenterVertically // Вирівнювання елементів по центру по вертикалі
                 ) {
-                    Text(
-                        text = stringResource(id = R.string.savings_needed),
-                        style = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Box {
-                        TextButton(
-                            onClick = { expanded = true },
-                            colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
-                        ) {
-                            Text(savingFrequency)
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.White)
-                        }
-                        DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            frequencies.forEach { selectionOption ->
-                                DropdownMenuItem(
-                                    text = { Text(selectionOption) },
-                                    onClick = {
-                                        savingFrequency = selectionOption
-                                        expanded = false
-                                        calculatedSaving = when (selectionOption) {
-                                            "день" -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod * 30)
-                                            "тиждень" -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod * 4)
-                                            "місяць" -> (goalAmount.toDoubleOrNull() ?: 0.0) / goalPeriod
-                                            "рік" -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod / 12)
-                                            else -> 0.0
-                                        }
-                                    }
-                                )
-                            }
-                        }
+                    TextButton(
+                        onClick = { expanded = true },
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                    ) {
+                        Text(
+                            text = savingFrequency,
+                            style = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
+                        )
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.White)
                     }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                if (savingFrequency.isNotEmpty()) {
                     Text(
-                        text = "${stringResource(id = R.string.savings_needed)} ${calculatedSaving.format(2)} $selectedCurrency",
+                        text = " ${calculatedSaving.format(2)} $selectedCurrency",
                         style = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
                     )
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    frequencies.forEach { selectionOption ->
+                        DropdownMenuItem(
+                            text = { Text(selectionOption) },
+                            onClick = {
+                                savingFrequency = selectionOption
+                                expanded = false
+                                calculatedSaving = when (selectionOption) {
+                                    perDay -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod * 30)
+                                    perWeek -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod * 4)
+                                    perMonth -> (goalAmount.toDoubleOrNull() ?: 0.0) / goalPeriod
+                                    perYear -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod / 12)
+                                    else -> 0.0
+                                }
+                            }
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -872,7 +872,6 @@ fun AddGoalDialog(
         containerColor = Color.Transparent // Прозорість до самого меню
     )
 }
-
 @Composable
 fun ProgressChart(percentageToGoal: Double, modifier: Modifier = Modifier, strokeWidth: Dp = 8.dp) {
     Box(
