@@ -219,14 +219,14 @@ class BudgetPlanningActivity : ComponentActivity() {
         LocalBroadcastManager.getInstance(this).unregisterReceiver(localeReceiver)
     }
 }
-class ThousandSeparatorVisualTransformation : VisualTransformation {
+class ThousandSeparatorVisualTransformationWithSpace : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val originalText = text.text
-        val formattedText = originalText.chunked(3).joinToString(" ")
+        val formattedText = originalText.reversed().chunked(3).joinToString(" ").reversed()
 
         val offsetMapping = object : OffsetMapping {
             override fun originalToTransformed(offset: Int): Int {
-                val spacesBefore = (0 until offset).count { originalText[it].isWhitespace() }
+                val spacesBefore = (0 until offset).count { originalText.reversed().chunked(3).joinToString(" ").reversed()[it].isWhitespace() }
                 return offset + spacesBefore
             }
 
@@ -766,7 +766,7 @@ fun AddGoalDialog(
                         modifier = Modifier
                             .fillMaxWidth(0.8f)
                             .align(Alignment.CenterHorizontally),
-                        visualTransformation = ThousandSeparatorVisualTransformation()
+                        visualTransformation = ThousandSeparatorVisualTransformationWithSpace()
                     )
                 }
                 if (!showGoalAmountInput) {
