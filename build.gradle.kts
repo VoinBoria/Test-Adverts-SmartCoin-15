@@ -122,8 +122,11 @@ dependencies {
     implementation("com.google.ads.mediation:adcolony:4.8.0.2") // Приклад залежності Mediation для AdColony
 
     // Firebase SDK
-    implementation(platform("com.google.firebase:firebase-bom:33.11.0")) // Використовуйте останню версію BoM
+    implementation(platform("com.google.firebase:firebase-bom:33.12.0")) // Використовуйте останню версію BoM
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
+
+    // ThreeTenABP
+    implementation("com.jakewharton.threetenabp:threetenabp:1.3.1")
 }
