@@ -642,7 +642,6 @@ fun AddLimitDialog(
         dismissButton = {}
     )
 }
-
 @OptIn(ExperimentalAnimationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AddGoalDialog(
@@ -672,6 +671,15 @@ fun AddGoalDialog(
     var savingFrequency by remember { mutableStateOf(perDay) }
     var calculatedSaving by remember { mutableStateOf(0.0) }
     var expanded by remember { mutableStateOf(false) }
+
+    // Load saved values from SharedPreferences
+    val sharedPreferences = context.getSharedPreferences("GoalPrefs", Context.MODE_PRIVATE)
+    val savedFrequency = sharedPreferences.getString("saving_frequency", perDay) ?: perDay
+    val savedCalculatedSaving = sharedPreferences.getFloat("calculated_saving", 0.0f).toDouble()
+
+    // Update state with saved values
+    savingFrequency = savedFrequency
+    calculatedSaving = savedCalculatedSaving
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
@@ -786,6 +794,12 @@ fun AddGoalDialog(
                                     perMonth -> (goalAmount.toDoubleOrNull() ?: 0.0) / goalPeriod
                                     perYear -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod / 12)
                                     else -> 0.0
+                                }
+                                // Save the selected frequency and calculated saving to SharedPreferences
+                                with(sharedPreferences.edit()) {
+                                    putString("saving_frequency", savingFrequency)
+                                    putFloat("calculated_saving", calculatedSaving.toFloat())
+                                    apply()
                                 }
                             }
                         )
