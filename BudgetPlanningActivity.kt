@@ -953,7 +953,7 @@ fun DatePickerField(selectedDate: String, onDateChange: (String) -> Unit) {
     OutlinedTextField(
         value = selectedDate,
         onValueChange = { },
-        label = { Text("Select date", color = Color.Gray) },
+        label = { Text(stringResource(id = R.string.select_date), color = Color.Gray) },
         readOnly = true,
         colors = TextFieldDefaults.outlinedTextFieldColors(
             focusedBorderColor = Color.Gray,
