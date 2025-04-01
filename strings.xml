@@ -155,10 +155,10 @@
     <string name="enter_goal_amount">Goal amount</string>
     <string name="months">Months</string>
     <string name="savings_needed">Savings needed</string>
-    <string name="per_day">per day</string>
-    <string name="per_week">per week</string>
-    <string name="per_month">per month</string>
-    <string name="per_year">per year</string>
+    <string name="per_day">Per day</string>
+    <string name="per_week">Per week</string>
+    <string name="per_month">Per month</string>
+    <string name="per_year">Per year</string>
     <string name="select_date">Select date</string>
     <string name="admob_banner_ad_unit_id">ca-app-pub-3940256099942544/6300978111</string>
 
