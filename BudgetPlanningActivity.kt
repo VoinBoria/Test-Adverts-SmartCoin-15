@@ -70,6 +70,10 @@ import java.util.*
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 class BudgetPlanningActivity : ComponentActivity() {
     private val viewModel: BudgetPlanningViewModel by viewModels()
 
@@ -210,7 +214,26 @@ class BudgetPlanningActivity : ComponentActivity() {
         LocalBroadcastManager.getInstance(this).unregisterReceiver(localeReceiver)
     }
 }
+class ThousandSeparatorVisualTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val originalText = text.text
+        val formattedText = originalText.chunked(3).joinToString(" ")
 
+        val offsetMapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int {
+                val spacesBefore = (0 until offset).count { originalText[it].isWhitespace() }
+                return offset + spacesBefore
+            }
+
+            override fun transformedToOriginal(offset: Int): Int {
+                val spacesBefore = (0 until offset).count { formattedText[it].isWhitespace() }
+                return offset - spacesBefore
+            }
+        }
+
+        return TransformedText(AnnotatedString(formattedText), offsetMapping)
+    }
+}
 class BudgetPlanningViewModel(application: Application) : AndroidViewModel(application) {
     val expenseCategories = MutableLiveData<Map<String, Double>>(emptyMap())
     val maxExpenses = MutableLiveData<Map<String, Double>>(emptyMap())
@@ -730,7 +753,8 @@ fun AddGoalDialog(
                         textStyle = LocalTextStyle.current.copy(color = Color.White, fontWeight = FontWeight.Bold),
                         modifier = Modifier
                             .fillMaxWidth(0.8f)
-                            .align(Alignment.CenterHorizontally)
+                            .align(Alignment.CenterHorizontally),
+                        visualTransformation = ThousandSeparatorVisualTransformation()
                     )
                 }
                 if (!showGoalAmountInput) {
@@ -886,6 +910,7 @@ fun AddGoalDialog(
         containerColor = Color.Transparent // Прозорість до самого меню
     )
 }
+
 @Composable
 fun ProgressChart(percentageToGoal: Double, modifier: Modifier = Modifier, strokeWidth: Dp = 8.dp) {
     Box(
