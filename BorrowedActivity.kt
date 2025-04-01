@@ -185,6 +185,66 @@ class BorrowedActivity : ComponentActivity() {
         }
     }
 }
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RepayBorrowedTransactionDialog(
+    onDismiss: () -> Unit,
+    onRepay: (Double) -> Unit,
+    transactionToRepay: BorrowedTransaction
+) {
+    var repaymentAmount by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = stringResource(id = R.string.repay_transaction), style = TextStyle(color = Color.White)) },
+        text = {
+            Column {
+                Text(
+                    text = "${stringResource(id = R.string.current_amount)}: ${transactionToRepay.amount.formatBorrowedAmount(2)}",
+                    style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                TextField(
+                    value = repaymentAmount,
+                    onValueChange = { repaymentAmount = it },
+                    label = { Text(stringResource(id = R.string.repayment_amount), style = TextStyle(color = Color.White)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    textStyle = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
+                    colors = TextFieldDefaults.textFieldColors(
+                        cursorColor = Color.White,
+                        focusedIndicatorColor = Color.White,
+                        unfocusedIndicatorColor = Color.White,
+                        focusedLabelColor = Color.White,
+                        unfocusedLabelColor = Color.White,
+                        containerColor = Color.Transparent
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val repaymentAmountValue = repaymentAmount.toDoubleOrNull()
+                    if (repaymentAmountValue != null) {
+                        onRepay(repaymentAmountValue)
+                        onDismiss()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFA500)),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text(stringResource(id = R.string.ok), style = MaterialTheme.typography.bodyLarge)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(id = R.string.cancel), color = Color.White)
+            }
+        },
+        containerColor = Color.DarkGray
+    )
+}
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
@@ -195,6 +255,7 @@ fun BorrowedScreen(
 ) {
     var showAddBorrowedDialog by remember { mutableStateOf(false) }
     var transactionToEdit by remember { mutableStateOf<BorrowedTransaction?>(null) }
+    var transactionToRepay by remember { mutableStateOf<BorrowedTransaction?>(null) }
     val transactions by viewModel.transactions.collectAsState()
 
     val totalBorrowed = transactions.sumOf { it.amount }
@@ -216,7 +277,13 @@ fun BorrowedScreen(
                         .weight(1f)
                 ) {
                     items(transactions) { borrowedTransaction ->
-                        BorrowedTransactionRow(borrowedTransaction, viewModel, onEdit = { transactionToEdit = it }, selectedCurrency = selectedCurrency)
+                        BorrowedTransactionRow(
+                            borrowedTransaction,
+                            viewModel,
+                            onEdit = { transactionToEdit = it },
+                            onRepay = { transactionToRepay = it },
+                            selectedCurrency = selectedCurrency
+                        )
                     }
                 }
 
@@ -267,6 +334,17 @@ fun BorrowedScreen(
                     transactionToEdit = transactionToEdit
                 )
             }
+
+            transactionToRepay?.let { transaction ->
+                RepayBorrowedTransactionDialog(
+                    onDismiss = { transactionToRepay = null },
+                    onRepay = { repaymentAmount ->
+                        viewModel.repayBorrowedTransaction(transaction, repaymentAmount)
+                        transactionToRepay = null
+                    },
+                    transactionToRepay = transaction
+                )
+            }
         }
     }
 }
@@ -281,6 +359,7 @@ fun BorrowedTransactionRow(
     borrowedTransaction: BorrowedTransaction,
     viewModel: BorrowedViewModel,
     onEdit: (BorrowedTransaction) -> Unit,
+    onRepay: (BorrowedTransaction) -> Unit,
     selectedCurrency: String
 ) {
     BoxWithConstraints {
@@ -302,7 +381,7 @@ fun BorrowedTransactionRow(
                     )
                 )
                 .clickable {
-                    // Handle click, if needed
+                    onRepay(borrowedTransaction)
                 }
                 .padding(padding)
         ) {
@@ -344,6 +423,7 @@ fun BorrowedTransactionRow(
         }
     }
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddOrEditBorrowedTransactionDialog(
@@ -549,6 +629,18 @@ class BorrowedViewModel(application: Application) : AndroidViewModel(application
     fun removeBorrowedTransaction(transaction: BorrowedTransaction) {
         _transactions.update { currentList ->
             currentList - transaction
+        }
+        saveTransactions(getApplication())
+    }
+
+    fun repayBorrowedTransaction(transaction: BorrowedTransaction, repaymentAmount: Double) {
+        _transactions.update { currentList ->
+            currentList.map {
+                if (it.id == transaction.id)
+                    it.copy(amount = (it.amount - repaymentAmount).coerceAtLeast(0.0))
+                else
+                    it
+            }
         }
         saveTransactions(getApplication())
     }
