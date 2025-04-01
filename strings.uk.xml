@@ -155,10 +155,10 @@
     <string name="enter_goal_amount">Ціль</string>
     <string name="months">Місяців</string>
     <string name="savings_needed">Потрібно відкладати</string>
-    <string name="per_day">в день</string>
-    <string name="per_week">в тиждень</string>
-    <string name="per_month">в місяць</string>
-    <string name="per_year">в рік</string>
+    <string name="per_day">В день</string>
+    <string name="per_week">В тиждень</string>
+    <string name="per_month">В місяць</string>
+    <string name="per_year">В рік</string>
     <string name="select_date">Виберіть дату</string>
     <string name="admob_banner_ad_unit_id">ca-app-pub-3940256099942544/6300978111</string>
 
