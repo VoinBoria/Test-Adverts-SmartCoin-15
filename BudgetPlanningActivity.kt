@@ -32,6 +32,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
@@ -74,6 +75,10 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
+import android.app.DatePickerDialog
+import androidx.compose.material.icons.filled.CalendarToday
+import java.text.SimpleDateFormat
+
 class BudgetPlanningActivity : ComponentActivity() {
     private val viewModel: BudgetPlanningViewModel by viewModels()
 
@@ -239,7 +244,7 @@ class BudgetPlanningViewModel(application: Application) : AndroidViewModel(appli
     val maxExpenses = MutableLiveData<Map<String, Double>>(emptyMap())
     val expenses = MutableLiveData<Map<String, Double>>(emptyMap())
     val incomes = MutableLiveData<Map<String, Double>>(emptyMap())
-    val savedAmounts = MutableLiveData<List<Double>>(emptyList())
+    val savedAmountsWithDates = MutableLiveData<List<Pair<Double, String>>>(emptyList())
     val saveMessage = MutableLiveData<String?>(null)
     val isAddingLimit = MutableLiveData<Boolean>(false)
     val isAddingGoal = MutableLiveData<Boolean>(false)
@@ -250,6 +255,7 @@ class BudgetPlanningViewModel(application: Application) : AndroidViewModel(appli
     var weeklySaving by mutableStateOf("")
     var monthlySaving by mutableStateOf("")
     var savedAmount by mutableStateOf("")
+    var selectedDate by mutableStateOf("")
 
     init {
         loadSavedAmounts(application.applicationContext)
@@ -296,17 +302,17 @@ class BudgetPlanningViewModel(application: Application) : AndroidViewModel(appli
     fun loadSavedAmounts(context: Context) {
         val sharedPreferences = context.getSharedPreferences("GoalPrefs", Context.MODE_PRIVATE)
         val gson = Gson()
-        val json = sharedPreferences.getString("saved_amounts", "[]")
-        val type = object : TypeToken<List<Double>>() {}.type
-        val savedAmountsList: List<Double> = gson.fromJson(json, type)
-        savedAmounts.value = savedAmountsList
+        val json = sharedPreferences.getString("saved_amounts_with_dates", "[]")
+        val type = object : TypeToken<List<Pair<Double, String>>>() {}.type
+        val savedAmountsList: List<Pair<Double, String>> = gson.fromJson(json, type)
+        savedAmountsWithDates.value = savedAmountsList
     }
 
-    fun saveSavedAmounts(context: Context, savedAmountsList: List<Double>) {
+    fun saveSavedAmounts(context: Context, savedAmountsList: List<Pair<Double, String>>) {
         val sharedPreferences = context.getSharedPreferences("GoalPrefs", Context.MODE_PRIVATE)
         val gson = Gson()
         val json = gson.toJson(savedAmountsList)
-        sharedPreferences.edit().putString("saved_amounts", json).apply()
+        sharedPreferences.edit().putString("saved_amounts_with_dates", json).apply()
     }
 
     fun updateMaxExpense(context: Context, category: String, maxExpense: Double) {
@@ -368,28 +374,33 @@ class BudgetPlanningViewModel(application: Application) : AndroidViewModel(appli
 
     fun addSaving(context: Context) {
         val sharedPreferences = context.getSharedPreferences("GoalPrefs", Context.MODE_PRIVATE)
-        val savedAmountsList = savedAmounts.value.orEmpty().toMutableList()
+        val savedAmountsList = savedAmountsWithDates.value.orEmpty().toMutableList()
         val savedAmountValue = savedAmount.toDoubleOrNull() ?: 0.0
-        savedAmountsList.add(savedAmountValue)
+        val currentDate = selectedDate.ifEmpty {
+            SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
+        }
+        savedAmountsList.add(savedAmountValue to currentDate)
         saveSavedAmounts(context, savedAmountsList)
 
-        savedAmounts.value = savedAmountsList
+        savedAmountsWithDates.value = savedAmountsList
         savedAmount = "" // Очистити поле вводу після збереження
+        selectedDate = "" // Очистити вибрану дату після збереження
     }
 
     fun getPercentageToGoal(): Double {
         val goalAmountValue = goalAmount.toDoubleOrNull() ?: 0.0
-        val totalSaved = savedAmounts.value?.sum() ?: 0.0
+        val totalSaved = savedAmountsWithDates.value?.sumOf { it.first } ?: 0.0
         return if (goalAmountValue > 0) (totalSaved / goalAmountValue) * 100 else 0.0
     }
 
     fun updateSaving(context: Context, index: Int, newAmount: Double) {
         viewModelScope.launch(Dispatchers.IO) {
-            val savedAmountsList = savedAmounts.value.orEmpty().toMutableList()
+            val savedAmountsList = savedAmountsWithDates.value.orEmpty().toMutableList()
             if (index in savedAmountsList.indices) {
-                savedAmountsList[index] = newAmount
+                val currentDate = savedAmountsList[index].second
+                savedAmountsList[index] = newAmount to currentDate
                 withContext(Dispatchers.Main) {
-                    savedAmounts.value = savedAmountsList
+                    savedAmountsWithDates.value = savedAmountsList
                 }
                 saveSavingsToPrefs(context, savedAmountsList)
             }
@@ -398,21 +409,21 @@ class BudgetPlanningViewModel(application: Application) : AndroidViewModel(appli
 
     fun deleteSaving(context: Context, index: Int) {
         viewModelScope.launch(Dispatchers.IO) {
-            val savedAmountsList = savedAmounts.value.orEmpty().toMutableList()
+            val savedAmountsList = savedAmountsWithDates.value.orEmpty().toMutableList()
             if (index in savedAmountsList.indices) {
                 savedAmountsList.removeAt(index)
                 withContext(Dispatchers.Main) {
-                    savedAmounts.value = savedAmountsList
+                    savedAmountsWithDates.value = savedAmountsList
                 }
                 saveSavingsToPrefs(context, savedAmountsList)
             }
         }
     }
 
-    private fun saveSavingsToPrefs(context: Context, savings: List<Double>) {
+    private fun saveSavingsToPrefs(context: Context, savings: List<Pair<Double, String>>) {
         val sharedPreferences = context.getSharedPreferences("GoalPrefs", Context.MODE_PRIVATE)
         sharedPreferences.edit()
-            .putString("saved_amounts", Gson().toJson(savings))
+            .putString("saved_amounts_with_dates", Gson().toJson(savings))
             .apply()
     }
 }
@@ -426,7 +437,7 @@ fun BudgetPlanningScreen(viewModel: BudgetPlanningViewModel, selectedCurrency: S
     val saveMessage by viewModel.saveMessage.observeAsState(null)
     val isAddingLimit by viewModel.isAddingLimit.observeAsState(false)
     val isAddingGoal by viewModel.isAddingGoal.observeAsState(false)
-    val savingsList by viewModel.savedAmounts.observeAsState(emptyList())
+    val savingsList by viewModel.savedAmountsWithDates.observeAsState(emptyList()) // Змінили на savedAmountsWithDates
     var isViewingSavings by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
@@ -510,7 +521,7 @@ fun BudgetPlanningScreen(viewModel: BudgetPlanningViewModel, selectedCurrency: S
                     isViewingSavings = true
                 },
                 percentageToGoal = percentageToGoal, // Передача прогресу до цілі
-                savedAmounts = savingsList, // Передача списку заощаджень
+                savedAmounts = savingsList.map { it.first }, // Передача списку заощаджень
                 selectedCurrency = selectedCurrency, // Передача вибраної валюти
                 context = context // Передача контексту
             )
@@ -665,7 +676,7 @@ fun AddLimitDialog(
         dismissButton = {}
     )
 }
-@OptIn(ExperimentalAnimationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddGoalDialog(
     goalAmount: String,
@@ -694,6 +705,7 @@ fun AddGoalDialog(
     var savingFrequency by remember { mutableStateOf(perDay) }
     var calculatedSaving by remember { mutableStateOf(0.0) }
     var expanded by remember { mutableStateOf(false) }
+    var selectedDate by remember { mutableStateOf("") } // Додано для вибору дати
 
     // Load saved values from SharedPreferences
     val sharedPreferences = context.getSharedPreferences("GoalPrefs", Context.MODE_PRIVATE)
@@ -858,6 +870,11 @@ fun AddGoalDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+                DatePickerField(
+                    selectedDate = selectedDate,
+                    onDateChange = { selectedDate = it }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = {
                         val newSavedAmount = savedAmount.toDoubleOrNull()
@@ -911,6 +928,42 @@ fun AddGoalDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DatePickerField(selectedDate: String, onDateChange: (String) -> Unit) {
+    val context = LocalContext.current
+    val calendar = Calendar.getInstance()
+    val year = calendar.get(Calendar.YEAR)
+    val month = calendar.get(Calendar.MONTH)
+    val day = calendar.get(Calendar.DAY_OF_MONTH)
+
+    val datePickerDialog = remember {
+        DatePickerDialog(context, { _, selectedYear, selectedMonth, selectedDay ->
+            val formattedDate = String.format("%02d/%02d/%d", selectedDay, selectedMonth + 1, selectedYear)
+            onDateChange(formattedDate)
+        }, year, month, day)
+    }
+
+    OutlinedTextField(
+        value = selectedDate,
+        onValueChange = { },
+        label = { Text("Select date", color = Color.Gray) },
+        readOnly = true,
+        colors = TextFieldDefaults.outlinedTextFieldColors(
+            focusedBorderColor = Color.Gray,
+            unfocusedBorderColor = Color.Gray,
+            cursorColor = Color.White
+        ),
+        textStyle = LocalTextStyle.current.copy(color = Color.White, fontWeight = FontWeight.Bold),
+        trailingIcon = {
+            IconButton(onClick = { datePickerDialog.show() }) {
+                Icon(imageVector = Icons.Default.CalendarToday, contentDescription = null, tint = Color.White)
+            }
+        },
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
 @Composable
 fun ProgressChart(percentageToGoal: Double, modifier: Modifier = Modifier, strokeWidth: Dp = 8.dp) {
     Box(
@@ -950,7 +1003,7 @@ fun Double.format(digits: Int) = "%.${digits}f".format(this)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SavingsListDialog(
-    savingsList: List<Double>,
+    savingsList: List<Pair<Double, String>>,
     onDismissRequest: () -> Unit,
     onUpdateSaving: (Int, Double) -> Unit,
     onDeleteSaving: (Int) -> Unit,
@@ -998,16 +1051,13 @@ fun SavingsListDialog(
                             Text(stringResource(id = R.string.cancel), color = Color.White)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = {
-                                val newAmount = editedAmount.toDoubleOrNull()
-                                if (newAmount != null) {
-                                    onUpdateSaving(editingIndex, newAmount)
-                                    editingIndex = -1
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.Green.copy(alpha = 0.6f))
-                        ) {
+                        TextButton(onClick = {
+                            val newAmount = editedAmount.toDoubleOrNull()
+                            if (newAmount != null) {
+                                onUpdateSaving(editingIndex, newAmount)
+                                editingIndex = -1
+                            }
+                        }) {
                             Text(stringResource(id = R.string.save), color = Color.White)
                         }
                     }
@@ -1017,63 +1067,62 @@ fun SavingsListDialog(
     }
 
     Dialog(onDismissRequest = onDismissRequest) {
-        BoxWithConstraints {
-            val screenWidth = maxWidth
-            val fontSize = if (screenWidth < 360.dp) 12.sp else 16.sp
-            val padding = if (screenWidth < 360.dp) 4.dp else 8.dp
-
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = Color.Black.copy(alpha = 0.8f)
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.8f))
-                    .padding(padding)
+                    .padding(16.dp)
             ) {
                 Text(
                     text = stringResource(id = R.string.savings_list),
-                    fontSize = fontSize,
-                    fontWeight = FontWeight.Bold,
                     color = Color.White,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(padding))
+                Spacer(modifier = Modifier.height(8.dp))
                 LazyColumn {
-                    itemsIndexed(savingsList) { index, saving ->
+                    itemsIndexed(savingsList) { index, (amount, date) ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(padding)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.DarkGray.copy(alpha = 0.7f))
-                                .padding(padding),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "${saving} $selectedCurrency",
+                                text = "$amount $selectedCurrency",
                                 color = Color.White,
-                                modifier = Modifier.weight(1f),
-                                fontSize = fontSize
+                                fontSize = 16.sp
                             )
-                            IconButton(onClick = {
-                                editingIndex = index
-                                editedAmount = saving.toString()
-                            }) {
-                                Icon(Icons.Default.Edit, contentDescription = stringResource(id = R.string.edit), tint = Color.Green)
-                            }
-                            IconButton(onClick = { onDeleteSaving(index) }) {
-                                Icon(Icons.Default.Delete, contentDescription = stringResource(id = R.string.delete), tint = Color.Red)
+                            Text(
+                                text = date,
+                                color = Color.Gray,
+                                fontSize = 14.sp
+                            )
+                            Row {
+                                IconButton(onClick = {
+                                    editedAmount = amount.toString()
+                                    editingIndex = index
+                                }) {
+                                    Icon(Icons.Default.Edit, contentDescription = stringResource(id = R.string.edit), tint = Color.White)
+                                }
+                                IconButton(onClick = { onDeleteSaving(index) }) {
+                                    Icon(Icons.Default.Delete, contentDescription = stringResource(id = R.string.delete), tint = Color.Red)
+                                }
                             }
                         }
-                        Spacer(modifier = Modifier.height(padding))
                     }
                 }
-                Spacer(modifier = Modifier.height(padding))
-                Button(
-                    onClick = onDismissRequest,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.6f)),
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(stringResource(id = R.string.close), color = Color.White, fontSize = fontSize)
+                    TextButton(onClick = onDismissRequest) {
+                        Text(stringResource(id = R.string.close), color = Color.White)
+                    }
                 }
             }
         }
