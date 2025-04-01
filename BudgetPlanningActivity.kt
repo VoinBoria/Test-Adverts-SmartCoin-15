@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
@@ -663,6 +664,11 @@ fun AddGoalDialog(
     val localContext = LocalContext.current
     val scrollState = rememberScrollState()
     var showGoalAmountInput by remember { mutableStateOf(false) }
+    var savingFrequency by remember { mutableStateOf("день") }
+    var calculatedSaving by remember { mutableStateOf(0.0) }
+    var expanded by remember { mutableStateOf(false) }
+
+    val frequencies = listOf("день", "тиждень", "місяць", "рік")
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
@@ -738,6 +744,53 @@ fun AddGoalDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Divider(color = Color.Gray)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically // Вирівнювання елементів по центру по вертикалі
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.savings_needed),
+                        style = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Box {
+                        TextButton(
+                            onClick = { expanded = true },
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                        ) {
+                            Text(savingFrequency)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.White)
+                        }
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            frequencies.forEach { selectionOption ->
+                                DropdownMenuItem(
+                                    text = { Text(selectionOption) },
+                                    onClick = {
+                                        savingFrequency = selectionOption
+                                        expanded = false
+                                        calculatedSaving = when (selectionOption) {
+                                            "день" -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod * 30)
+                                            "тиждень" -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod * 4)
+                                            "місяць" -> (goalAmount.toDoubleOrNull() ?: 0.0) / goalPeriod
+                                            "рік" -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod / 12)
+                                            else -> 0.0
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                if (savingFrequency.isNotEmpty()) {
+                    Text(
+                        text = "${stringResource(id = R.string.savings_needed)} ${calculatedSaving.format(2)} $selectedCurrency",
+                        style = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "${stringResource(id = R.string.total_savings)}: ${savedAmounts.sum()} $selectedCurrency",
