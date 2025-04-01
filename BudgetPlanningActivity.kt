@@ -796,49 +796,55 @@ fun AddGoalDialog(
                     text = stringResource(id = R.string.savings_needed),
                     style = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically // Вирівнювання елементів по центру по вертикалі
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
                 ) {
-                    TextButton(
-                        onClick = { expanded = true },
-                        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
                     ) {
+                        TextButton(
+                            onClick = { expanded = true },
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                        ) {
+                            Text(
+                                text = savingFrequency,
+                                style = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
+                            )
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.White)
+                        }
                         Text(
-                            text = savingFrequency,
+                            text = " ${calculatedSaving.format(2)} $selectedCurrency",
                             style = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
                         )
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.White)
                     }
-                    Text(
-                        text = " ${calculatedSaving.format(2)} $selectedCurrency",
-                        style = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
-                    )
-                }
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    frequencies.forEach { selectionOption ->
-                        DropdownMenuItem(
-                            text = { Text(selectionOption) },
-                            onClick = {
-                                savingFrequency = selectionOption
-                                expanded = false
-                                calculatedSaving = when (selectionOption) {
-                                    perDay -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod * 30)
-                                    perWeek -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod * 4)
-                                    perMonth -> (goalAmount.toDoubleOrNull() ?: 0.0) / goalPeriod
-                                    perYear -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod / 12)
-                                    else -> 0.0
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        frequencies.forEach { selectionOption ->
+                            DropdownMenuItem(
+                                text = { Text(selectionOption) },
+                                onClick = {
+                                    savingFrequency = selectionOption
+                                    expanded = false
+                                    calculatedSaving = when (selectionOption) {
+                                        perDay -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod * 30)
+                                        perWeek -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod * 4)
+                                        perMonth -> (goalAmount.toDoubleOrNull() ?: 0.0) / goalPeriod
+                                        perYear -> (goalAmount.toDoubleOrNull() ?: 0.0) / (goalPeriod / 12)
+                                        else -> 0.0
+                                    }
+                                    // Save the selected frequency and calculated saving to SharedPreferences
+                                    with(sharedPreferences.edit()) {
+                                        putString("saving_frequency", savingFrequency)
+                                        putFloat("calculated_saving", calculatedSaving.toFloat())
+                                        apply()
+                                    }
                                 }
-                                // Save the selected frequency and calculated saving to SharedPreferences
-                                with(sharedPreferences.edit()) {
-                                    putString("saving_frequency", savingFrequency)
-                                    putFloat("calculated_saving", calculatedSaving.toFloat())
-                                    apply()
-                                }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
