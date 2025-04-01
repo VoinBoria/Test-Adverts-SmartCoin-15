@@ -187,19 +187,20 @@ class BorrowedActivity : ComponentActivity() {
 }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RepayBorrowedTransactionDialog(
+fun RepayOrAddBorrowedTransactionDialog(
     onDismiss: () -> Unit,
-    onRepay: (Double, String) -> Unit, // Додано строку для дати повернення
-    transactionToRepay: BorrowedTransaction
+    onRepayOrAdd: (Double, String, Boolean) -> Unit, // Added a boolean for adding to debt
+    transactionToRepayOrAdd: BorrowedTransaction
 ) {
-    var repaymentAmount by remember { mutableStateOf("") }
-    var repaymentDate by remember { mutableStateOf(getCurrentDateForBorrowed()) } // Стан для дати повернення
+    var transactionAmount by remember { mutableStateOf("") }
+    var transactionDate by remember { mutableStateOf(getCurrentDateForBorrowed()) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var isRepay by remember { mutableStateOf(true) } // State to toggle between repay or add debt
 
     if (showDatePicker) {
         BorrowedDatePickerDialog(
             onDateSelected = { selectedDate ->
-                repaymentDate = selectedDate
+                transactionDate = selectedDate
                 showDatePicker = false
             }
         )
@@ -207,18 +208,23 @@ fun RepayBorrowedTransactionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(text = stringResource(id = R.string.repay_transaction), style = TextStyle(color = Color.White)) },
+        title = {
+            Text(
+                text = if (isRepay) stringResource(id = R.string.repay_transaction) else stringResource(id = R.string.add_debt),
+                style = TextStyle(color = Color.White)
+            )
+        },
         text = {
             Column {
                 Text(
-                    text = "${stringResource(id = R.string.current_amount)}: ${transactionToRepay.amount.formatBorrowedAmount(2)}",
+                    text = "${stringResource(id = R.string.current_amount)}: ${transactionToRepayOrAdd.amount.formatBorrowedAmount(2)}",
                     style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 TextField(
-                    value = repaymentAmount,
-                    onValueChange = { repaymentAmount = it },
-                    label = { Text(stringResource(id = R.string.repayment_amount), style = TextStyle(color = Color.White)) },
+                    value = transactionAmount,
+                    onValueChange = { transactionAmount = it },
+                    label = { Text(if (isRepay) stringResource(id = R.string.repayment_amount) else stringResource(id = R.string.add_debt_amount), style = TextStyle(color = Color.White)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     textStyle = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
                     colors = TextFieldDefaults.textFieldColors(
@@ -232,7 +238,7 @@ fun RepayBorrowedTransactionDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = stringResource(id = R.string.repayment_date),
+                    text = stringResource(id = R.string.transaction_date),
                     style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
@@ -241,16 +247,38 @@ fun RepayBorrowedTransactionDialog(
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
                 ) {
-                    Text(text = repaymentDate, style = TextStyle(color = Color.White))
+                    Text(text = transactionDate, style = TextStyle(color = Color.White))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.repay_transaction),
+                        style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
+                        modifier = Modifier
+                            .clickable { isRepay = true }
+                            .background(if (isRepay) Color.Gray else Color.Transparent)
+                            .padding(8.dp)
+                    )
+                    Text(
+                        text = stringResource(id = R.string.add_debt),
+                        style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
+                        modifier = Modifier
+                            .clickable { isRepay = false }
+                            .background(if (!isRepay) Color.Gray else Color.Transparent)
+                            .padding(8.dp)
+                    )
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val repaymentAmountValue = repaymentAmount.toDoubleOrNull()
-                    if (repaymentAmountValue != null) {
-                        onRepay(repaymentAmountValue, repaymentDate) // Передача обраної дати повернення
+                    val transactionAmountValue = transactionAmount.toDoubleOrNull()
+                    if (transactionAmountValue != null) {
+                        onRepayOrAdd(transactionAmountValue, transactionDate, isRepay)
                         onDismiss()
                     }
                 },
@@ -269,7 +297,6 @@ fun RepayBorrowedTransactionDialog(
         containerColor = Color.DarkGray
     )
 }
-
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun BorrowedScreen(
@@ -279,7 +306,7 @@ fun BorrowedScreen(
 ) {
     var showAddBorrowedDialog by remember { mutableStateOf(false) }
     var transactionToEdit by remember { mutableStateOf<BorrowedTransaction?>(null) }
-    var transactionToRepay by remember { mutableStateOf<BorrowedTransaction?>(null) }
+    var transactionToRepayOrAdd by remember { mutableStateOf<BorrowedTransaction?>(null) }
     val transactions by viewModel.transactions.collectAsState()
 
     val totalBorrowed = transactions.sumOf { it.amount }
@@ -305,7 +332,7 @@ fun BorrowedScreen(
                             borrowedTransaction,
                             viewModel,
                             onEdit = { transactionToEdit = it },
-                            onRepay = { transactionToRepay = it },
+                            onRepayOrAdd = { transactionToRepayOrAdd = it },
                             selectedCurrency = selectedCurrency
                         )
                     }
@@ -359,14 +386,18 @@ fun BorrowedScreen(
                 )
             }
 
-            transactionToRepay?.let { transaction ->
-                RepayBorrowedTransactionDialog(
-                    onDismiss = { transactionToRepay = null },
-                    onRepay = { repaymentAmount, repaymentDate -> // Передаємо два параметри
-                        viewModel.repayBorrowedTransaction(transaction, repaymentAmount, repaymentDate)
-                        transactionToRepay = null
+            transactionToRepayOrAdd?.let { transaction ->
+                RepayOrAddBorrowedTransactionDialog(
+                    onDismiss = { transactionToRepayOrAdd = null },
+                    onRepayOrAdd = { transactionAmount, transactionDate, isRepay ->
+                        if (isRepay) {
+                            viewModel.repayBorrowedTransaction(transaction, transactionAmount, transactionDate)
+                        } else {
+                            viewModel.addToBorrowedTransaction(transaction, transactionAmount, transactionDate)
+                        }
+                        transactionToRepayOrAdd = null
                     },
-                    transactionToRepay = transaction
+                    transactionToRepayOrAdd = transaction
                 )
             }
         }
@@ -383,7 +414,7 @@ fun BorrowedTransactionRow(
     borrowedTransaction: BorrowedTransaction,
     viewModel: BorrowedViewModel,
     onEdit: (BorrowedTransaction) -> Unit,
-    onRepay: (BorrowedTransaction) -> Unit,
+    onRepayOrAdd: (BorrowedTransaction) -> Unit,
     selectedCurrency: String
 ) {
     BoxWithConstraints {
@@ -405,7 +436,7 @@ fun BorrowedTransactionRow(
                     )
                 )
                 .clickable {
-                    onRepay(borrowedTransaction)
+                    onRepayOrAdd(borrowedTransaction)
                 }
                 .padding(padding)
         ) {
@@ -642,10 +673,37 @@ class BorrowedViewModel(application: Application) : AndroidViewModel(application
         }
         saveTransactions(getApplication())
     }
+    fun addToBorrowedTransaction(transaction: BorrowedTransaction, additionalAmount: Double, transactionDate: String) {
+        _transactions.update { currentList ->
+            currentList.map { it: BorrowedTransaction ->
+                if (it.id == transaction.id)
+                    it.copy(amount = it.amount + additionalAmount, comment = "${it.comment}\nAdditional debt of $additionalAmount on $transactionDate")
+                else
+                    it
+            }
+        }
+        saveTransactions(getApplication())
+    }
 
     fun updateBorrowedTransaction(transaction: BorrowedTransaction) {
         _transactions.update { currentList ->
-            currentList.map { if (it.id == transaction.id) transaction else it }
+            currentList.map {
+                if (it.id == transaction.id) {
+                    // Оновлення транзакції зі збереженням існуючих коментарів, якщо вони не змінювались
+                    val updatedComment = if (transaction.comment.isEmpty()) it.comment else transaction.comment
+                    transaction.copy(comment = updatedComment)
+                } else {
+                    it
+                }
+            }
+        }
+        saveTransactions(getApplication())
+    }
+    fun addOrUpdateBorrowedTransaction(transaction: BorrowedTransaction) {
+        _transactions.update { currentList ->
+            // Видалення дублікатів перед додаванням або оновленням
+            val updatedList = currentList.filter { it.id != transaction.id }
+            updatedList + transaction
         }
         saveTransactions(getApplication())
     }
