@@ -13,6 +13,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.paint
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -42,6 +51,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -58,7 +68,7 @@ import kotlinx.coroutines.withContext
 import java.util.*
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
-
+import androidx.compose.ui.graphics.drawscope.Stroke
 class BudgetPlanningActivity : ComponentActivity() {
     private val viewModel: BudgetPlanningViewModel by viewModels()
 
@@ -460,19 +470,15 @@ fun BudgetPlanningScreen(viewModel: BudgetPlanningViewModel, selectedCurrency: S
             val percentageToGoal = viewModel.getPercentageToGoal() // Обчислення прогресу до цілі
             AddGoalDialog(
                 goalAmount = viewModel.goalAmount,
-                goalPeriod = viewModel.goalPeriod,
-                weeklySaving = viewModel.weeklySaving,
-                monthlySaving = viewModel.monthlySaving,
+                goalPeriod = viewModel.goalPeriod.toFloatOrNull() ?: 0f,
                 savedAmount = viewModel.savedAmount, // Передача savedAmount
                 onGoalAmountChange = { viewModel.goalAmount = it },
-                onGoalPeriodChange = { viewModel.goalPeriod = it },
+                onGoalPeriodChange = { viewModel.goalPeriod = it.toString() },
                 onSavedAmountChange = { viewModel.savedAmount = it },
                 onDismissRequest = { viewModel.isAddingGoal.value = false },
-                onCalculateGoal = { viewModel.calculateGoal() },
                 onSaveGoal = {
                     viewModel.saveGoal(context)
                     Toast.makeText(context, context.getString(R.string.goal_saved), Toast.LENGTH_SHORT).show() // Показ повідомлення після збереження
-                    // Показ повідомлення після збереження
                 },
                 onAddSaving = { viewModel.addSaving(context) },
                 onViewSavings = {
@@ -636,19 +642,16 @@ fun AddLimitDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalAnimationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AddGoalDialog(
     goalAmount: String,
-    goalPeriod: String,
-    weeklySaving: String,
-    monthlySaving: String,
+    goalPeriod: Float,
     savedAmount: String,
     onGoalAmountChange: (String) -> Unit,
-    onGoalPeriodChange: (String) -> Unit,
+    onGoalPeriodChange: (Float) -> Unit,
     onSavedAmountChange: (String) -> Unit,
     onDismissRequest: () -> Unit,
-    onCalculateGoal: () -> Unit,
     onSaveGoal: () -> Unit,
     onAddSaving: () -> Unit,
     onViewSavings: () -> Unit,
@@ -659,82 +662,97 @@ fun AddGoalDialog(
 ) {
     val localContext = LocalContext.current
     val scrollState = rememberScrollState()
+    var showGoalAmountInput by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
+        modifier = Modifier.width(350.dp), // Зробити меню трохи ширшим
         title = {
             Text(stringResource(id = R.string.my_goal), style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold))
         },
         text = {
-            Column(modifier = Modifier.verticalScroll(scrollState)) {
-                OutlinedTextField(
-                    value = goalAmount,
-                    onValueChange = onGoalAmountChange,
-                    label = { Text("${stringResource(id = R.string.goal_amount)} ($selectedCurrency)", color = Color.White) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = TextFieldDefaults.outlinedTextFieldColors(
-                        focusedBorderColor = Color.Gray,
-                        unfocusedBorderColor = Color.Gray,
-                        cursorColor = Color.White
-                    ),
-                    textStyle = LocalTextStyle.current.copy(color = Color.White, fontWeight = FontWeight.Bold),
-                    modifier = Modifier.fillMaxWidth()
+            Column(modifier = Modifier
+                .verticalScroll(scrollState)
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.DarkGray.copy(alpha = 0.8f), // Темний зліва
+                            Color.Blue.copy(alpha = 0.8f) // Синій справа
+                        )
+                    )
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = goalPeriod,
-                    onValueChange = onGoalPeriodChange,
-                    label = { Text(stringResource(id = R.string.goal_period), color = Color.White) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = TextFieldDefaults.outlinedTextFieldColors(
-                        focusedBorderColor = Color.Gray,
-                        unfocusedBorderColor = Color.Gray,
-                        cursorColor = Color.White
-                    ),
-                    textStyle = LocalTextStyle.current.copy(color = Color.White, fontWeight = FontWeight.Bold),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                TextButton(
-                    onClick = onCalculateGoal,
+                .padding(horizontal = 16.dp) // Зсунути текст від краю
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .padding(vertical = 16.dp)
                 ) {
-                    Text(stringResource(id = R.string.calculate), color = Color.Yellow, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    ProgressChart(
+                        percentageToGoal = percentageToGoal,
+                        modifier = Modifier.size(150.dp) // Встановити розмір діаграми
+                    )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "${stringResource(id = R.string.weekly_saving)}: $weeklySaving $selectedCurrency",
-                    style = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
-                )
+                Spacer(modifier = Modifier.height(8.dp))
+                AnimatedVisibility(
+                    visible = showGoalAmountInput,
+                    enter = expandVertically(animationSpec = tween(durationMillis = 300)) + fadeIn(animationSpec = tween(durationMillis = 300)),
+                    exit = shrinkVertically(animationSpec = tween(durationMillis = 300)) + fadeOut(animationSpec = tween(durationMillis = 300))
+                ) {
+                    OutlinedTextField(
+                        value = goalAmount,
+                        onValueChange = onGoalAmountChange,
+                        label = { Text("${stringResource(id = R.string.goal_amount)} ($selectedCurrency)", color = Color.White) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = TextFieldDefaults.outlinedTextFieldColors(
+                            focusedBorderColor = Color.Gray,
+                            unfocusedBorderColor = Color.Gray,
+                            cursorColor = Color.White
+                        ),
+                        textStyle = LocalTextStyle.current.copy(color = Color.White, fontWeight = FontWeight.Bold),
+                        modifier = Modifier
+                            .fillMaxWidth(0.8f)
+                            .align(Alignment.CenterHorizontally)
+                    )
+                }
+                if (!showGoalAmountInput) {
+                    Button(
+                        onClick = { showGoalAmountInput = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(id = R.string.enter_goal_amount), color = Color.White)
+                    }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "${stringResource(id = R.string.monthly_saving)}: $monthlySaving $selectedCurrency",
+                    text = "${stringResource(id = R.string.goal_period)}: ${goalPeriod.toInt()} ${stringResource(id = R.string.months)}",
                     style = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Slider(
+                    value = goalPeriod,
+                    onValueChange = onGoalPeriodChange,
+                    valueRange = 1f..120f, // Від 1 місяця до 120 місяців
+                    steps = 119,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 Divider(color = Color.Gray)
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "${stringResource(id = R.string.total_savings)}: ${savedAmounts.sum()} $selectedCurrency",
                     style = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "${stringResource(id = R.string.goal_progress)}: ${percentageToGoal.format(2)}%",
-                    style = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontWeight = FontWeight.Bold)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
                 TextButton(
                     onClick = onViewSavings,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .height(36.dp)
                 ) {
-                    Text(stringResource(id = R.string.view_savings), color = Color.Green, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text(stringResource(id = R.string.view_savings), color = Color.Green, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = savedAmount,
                     onValueChange = onSavedAmountChange,
@@ -748,65 +766,90 @@ fun AddGoalDialog(
                     textStyle = LocalTextStyle.current.copy(color = Color.White, fontWeight = FontWeight.Bold),
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        val newSavedAmount = savedAmount.toDoubleOrNull()
+                        if (newSavedAmount != null && newSavedAmount > 0) {
+                            onAddSaving()
+                            val sharedPreferences = context.getSharedPreferences("GoalPrefs", Context.MODE_PRIVATE)
+                            val editor = sharedPreferences.edit()
+                            val updatedSavedAmounts = savedAmounts + newSavedAmount
+                            editor.putString("saved_amounts", Gson().toJson(updatedSavedAmounts))
+                            editor.apply()
+                            Toast.makeText(localContext, "${localContext.getString(R.string.you_saved)} $newSavedAmount $selectedCurrency", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(localContext, localContext.getString(R.string.enter_valid_value), Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF006400).copy(alpha = 0.4f)), // Темно-зелена прозора кнопка
+                    shape = RoundedCornerShape(0.dp), // Прямі кути
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(top = 8.dp)
+                ) {
+                    Text(stringResource(id = R.string.ok), color = Color.White, fontSize = 14.sp)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End // Зміщення кнопки вправо
+                    horizontalArrangement = Arrangement.SpaceBetween // Розташування кнопок поряд
                 ) {
-                    Button(
-                        onClick = {
-                            val newSavedAmount = savedAmount.toDoubleOrNull()
-                            if (newSavedAmount != null && newSavedAmount > 0) {
-                                onAddSaving()
-                                val sharedPreferences = context.getSharedPreferences("GoalPrefs", Context.MODE_PRIVATE)
-                                val editor = sharedPreferences.edit()
-                                val updatedSavedAmounts = savedAmounts + newSavedAmount
-                                editor.putString("saved_amounts", Gson().toJson(updatedSavedAmounts))
-                                editor.apply()
-                                Toast.makeText(localContext, "${localContext.getString(R.string.you_saved)} $newSavedAmount $selectedCurrency", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(localContext, localContext.getString(R.string.enter_valid_value), Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF006400).copy(alpha = 0.4f)), // Темно-зелена прозора кнопка
-                        shape = RoundedCornerShape(0.dp), // Прямі кути
+                    TextButton(
+                        onClick = onDismissRequest,
                         modifier = Modifier
-                            .width(80.dp) // Ширина кнопки
-                            .height(40.dp) // Висота кнопки
+                            .width(120.dp) // Додана ширина кнопок
+                            .height(40.dp) // Висота кнопок
                     ) {
-                        Text(stringResource(id = R.string.ok), color = Color.White, fontSize = 14.sp)
+                        Text(stringResource(id = R.string.cancel), color = Color.Red, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(
+                        onClick = onSaveGoal,
+                        modifier = Modifier
+                            .width(120.dp) // Додана ширина кнопок
+                            .height(40.dp) // Висота кнопок
+                    ) {
+                        Text(stringResource(id = R.string.save), color = Color.Green, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
         },
         confirmButton = {},
-        dismissButton = {
-            Row(
-                modifier = Modifier
-                    .padding(all = 8.dp)
-                    .fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                TextButton(
-                    onClick = onDismissRequest,
-                    modifier = Modifier
-                        .width(120.dp) // Додана ширина кнопок
-                        .height(40.dp) // Висота кнопок
-                ) {
-                    Text(stringResource(id = R.string.cancel), color = Color.Red, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                }
-                TextButton(
-                    onClick = onSaveGoal,
-                    modifier = Modifier
-                        .width(120.dp) // Додана ширина кнопок
-                        .height(40.dp) // Висота кнопок
-                ) {
-                    Text(stringResource(id = R.string.save), color = Color.Green, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        },
-        containerColor = Color.DarkGray.copy(alpha = 0.8f) // Додана прозорість до самого меню
+        dismissButton = {},
+        containerColor = Color.Transparent // Прозорість до самого меню
     )
+}
+
+@Composable
+fun ProgressChart(percentageToGoal: Double, modifier: Modifier = Modifier, strokeWidth: Dp = 8.dp) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+    ) {
+        Canvas(modifier = modifier) {
+            val progressAngle = (percentageToGoal / 100f) * 360f
+            drawArc(
+                color = Color.Gray.copy(alpha = 0.3f),
+                startAngle = 0f,
+                sweepAngle = 360f,
+                useCenter = false,
+                style = Stroke(width = strokeWidth.toPx())
+            )
+            drawArc(
+                color = Color.Green,
+                startAngle = -90f,
+                sweepAngle = progressAngle.toFloat(),
+                useCenter = false,
+                style = Stroke(width = strokeWidth.toPx())
+            )
+        }
+        Text(
+            text = "${percentageToGoal.format(2)}%",
+            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+            color = Color.White,
+            fontSize = 16.sp,
+        )
+    }
 }
 
 // Додано: функція для форматування відсотка
