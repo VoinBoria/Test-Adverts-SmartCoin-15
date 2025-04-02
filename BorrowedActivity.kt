@@ -296,7 +296,10 @@ fun RepayOrAddBorrowedTransactionDialog(
                             ) {
                                 Text(
                                     text = "${subTransaction.date}: ${subTransaction.amount.formatAmountWithCommas(2)}",
-                                    style = TextStyle(color = Color.White)
+                                    style = TextStyle(
+                                        color = if (subTransaction.amount < 0) Color.Red else Color.Green,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 )
                                 IconButton(onClick = {
                                     onDeleteSubTransaction(subTransaction)
