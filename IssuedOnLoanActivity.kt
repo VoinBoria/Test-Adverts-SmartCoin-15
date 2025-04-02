@@ -400,7 +400,10 @@ fun RepayOrAddIssuedOnLoanTransactionDialog(
                             ) {
                                 Text(
                                     text = "${subTransaction.date}: ${subTransaction.amount.formatIssuedOnLoanAmount(2)}",
-                                    style = TextStyle(color = Color.White)
+                                    style = TextStyle(
+                                        color = if (subTransaction.amount < 0) Color.Red else Color.Green,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 )
                                 IconButton(onClick = {
                                     onDeleteSubTransaction(subTransaction)
@@ -418,7 +421,7 @@ fun RepayOrAddIssuedOnLoanTransactionDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val transactionAmountValue = transactionAmount.toDoubleOrNull()
+                    val transactionAmountValue = transactionAmount.replace(",", "").toDoubleOrNull() // Remove commas before converting
                     if (transactionAmountValue != null) {
                         onRepayOrAdd(transactionAmountValue, transactionDate, isRepay)
                     }
