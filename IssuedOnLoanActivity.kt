@@ -1,4 +1,4 @@
-package com.serhio.homeaccountingapp;
+package com.serhio.homeaccountingapp
 
 import android.annotation.SuppressLint
 import android.app.Application
@@ -60,11 +60,21 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
 class IssuedOnLoanActivity : ComponentActivity() {
-    private val loanViewModel: LoanViewModel by viewModels { LoanViewModelFactory(application) }
+    private val issuedOnLoanViewModel: IssuedOnLoanViewModel by viewModels { IssuedOnLoanViewModelFactory(application) }
+
     private fun <T> navigateToActivity(activityClass: Class<T>) {
         val intent = Intent(this, activityClass)
         startActivity(intent)
     }
+
+    private fun updateLocale(context: Context, language: String) {
+        val locale = Locale(language)
+        Locale.setDefault(locale)
+        val config = context.resources.configuration
+        config.setLocale(locale)
+        context.resources.updateConfiguration(config, context.resources.displayMetrics)
+    }
+
     private fun getSelectedCurrency(context: Context): String {
         val sharedPreferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         return sharedPreferences.getString("currency", "UAH") ?: "UAH"
@@ -88,18 +98,17 @@ class IssuedOnLoanActivity : ComponentActivity() {
                 val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
                 val scope = rememberCoroutineScope()
                 var showOverdueMessage by remember { mutableStateOf(false) }
+                val selectedCurrency = getSelectedCurrency(LocalContext.current)
 
                 LaunchedEffect(Unit) {
-                    loanViewModel.loadTransactions(application)
-                    if (loanViewModel.hasOverdueTransactions()) {
+                    issuedOnLoanViewModel.loadTransactions(application)
+                    if (issuedOnLoanViewModel.hasOverdueTransactions()) {
                         delay(500)
                         showOverdueMessage = true
                         delay(3000)
                         showOverdueMessage = false
                     }
                 }
-
-                val selectedCurrency = getSelectedCurrency(this)
 
                 ModalNavigationDrawer(
                     drawerState = drawerState,
@@ -144,25 +153,24 @@ class IssuedOnLoanActivity : ComponentActivity() {
                                     )
                                     .padding(innerPadding)
                             ) {
-                                IssuedOnLoanScreen(viewModel = loanViewModel, selectedCurrency = selectedCurrency)
+                                IssuedOnLoanScreen(viewModel = issuedOnLoanViewModel, selectedCurrency = selectedCurrency)
 
-                                // Анімоване повідомлення про прострочені позичання
                                 AnimatedVisibility(
                                     visible = showOverdueMessage,
                                     enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                                     exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
                                     modifier = Modifier
                                         .align(Alignment.BottomCenter)
-                                        .padding(bottom = 100.dp) // збільшено значення відступу
+                                        .padding(bottom = 100.dp)
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .fillMaxWidth(0.9f) // встановлено ширину на 90% від ширини екрану
+                                            .fillMaxWidth(0.9f)
                                             .background(
                                                 brush = Brush.verticalGradient(
                                                     colors = listOf(Color.Red.copy(alpha = 0.8f), Color.Transparent)
                                                 ),
-                                                shape = RoundedCornerShape(16.dp) // додано зглажені кути
+                                                shape = RoundedCornerShape(16.dp)
                                             )
                                             .padding(16.dp)
                                     ) {
@@ -176,29 +184,20 @@ class IssuedOnLoanActivity : ComponentActivity() {
             }
         }
     }
-
-    private fun updateLocale(context: Context, language: String) {
-        val locale = Locale(language)
-        Locale.setDefault(locale)
-        val config = context.resources.configuration
-        config.setLocale(locale)
-        context.resources.updateConfiguration(config, context.resources.displayMetrics)
-    }
 }
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun IssuedOnLoanScreen(
-    viewModel: LoanViewModel,
-    selectedCurrency: String,
-    modifier: Modifier = Modifier
+    viewModel: IssuedOnLoanViewModel,
+    modifier: Modifier = Modifier,
+    selectedCurrency: String
 ) {
-    var showAddLoanDialog by remember { mutableStateOf(false) }
+    var showAddIssuedOnLoanDialog by remember { mutableStateOf(false) }
     var transactionToEdit by remember { mutableStateOf<LoanTransaction?>(null) }
+    var transactionToRepayOrAdd by remember { mutableStateOf<LoanTransaction?>(null) }
     val transactions by viewModel.transactions.collectAsState()
-
-    // Обчислюємо загальну суму позичань
-    val totalLoaned = transactions.sumOf { it.amount }
+    val totalIssuedOnLoan by remember { derivedStateOf { transactions.sumOf { it.amount } } } // Ensure the total updates when transactions change
 
     BoxWithConstraints {
         val screenWidth = maxWidth
@@ -216,12 +215,17 @@ fun IssuedOnLoanScreen(
                         .fillMaxWidth()
                         .weight(1f)
                 ) {
-                    items(transactions) { loanTransaction ->
-                        LoanTransactionRow(loanTransaction, viewModel, selectedCurrency, onEdit = { transactionToEdit = it })
+                    items(transactions) { issuedOnLoanTransaction ->
+                        IssuedOnLoanTransactionRow(
+                            issuedOnLoanTransaction,
+                            viewModel,
+                            onEdit = { transactionToEdit = it },
+                            onRepayOrAdd = { transactionToRepayOrAdd = it },
+                            selectedCurrency = selectedCurrency
+                        )
                     }
                 }
 
-                // Додаємо підсумок знизу екрана
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -234,7 +238,7 @@ fun IssuedOnLoanScreen(
                         modifier = Modifier.padding(bottom = padding)
                     )
                     Text(
-                        text = "${totalLoaned.formatLoanAmount(2)} $selectedCurrency",
+                        text = "${totalIssuedOnLoan.formatIssuedOnLoanAmount(2)} $selectedCurrency",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = Color.White
                     )
@@ -242,19 +246,19 @@ fun IssuedOnLoanScreen(
             }
 
             FloatingActionButton(
-                onClick = { showAddLoanDialog = true },
+                onClick = { showAddIssuedOnLoanDialog = true },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(padding),
-                containerColor = Color(0xFFDC143C)
+                containerColor = Color(0xFFFFA500)
             ) {
                 Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.add_transaction), tint = Color.White)
             }
 
-            if (showAddLoanDialog || transactionToEdit != null) {
-                AddOrEditLoanTransactionDialog(
+            if (showAddIssuedOnLoanDialog || transactionToEdit != null) {
+                AddOrEditIssuedOnLoanTransactionDialog(
                     onDismiss = {
-                        showAddLoanDialog = false
+                        showAddIssuedOnLoanDialog = false
                         transactionToEdit = null
                     },
                     onSave = { newTransaction ->
@@ -264,18 +268,187 @@ fun IssuedOnLoanScreen(
                             viewModel.addLoanTransaction(newTransaction)
                         }
                         transactionToEdit = null
-                        showAddLoanDialog = false
+                        showAddIssuedOnLoanDialog = false
                     },
                     transactionToEdit = transactionToEdit
+                )
+            }
+
+            transactionToRepayOrAdd?.let { transaction ->
+                RepayOrAddIssuedOnLoanTransactionDialog(
+                    onDismiss = { transactionToRepayOrAdd = null },
+                    onRepayOrAdd = { transactionAmount: Double, transactionDate: String, isRepay: Boolean ->
+                        if (isRepay) {
+                            viewModel.repayLoanTransaction(transaction, transactionAmount, transactionDate)
+                        } else {
+                            viewModel.addToLoanTransaction(transaction, transactionAmount, transactionDate)
+                        }
+                        transactionToRepayOrAdd = null
+                    },
+                    transactionToRepayOrAdd = transaction,
+                    onDeleteSubTransaction = { subTransaction: IssuedSubTransaction ->
+                        viewModel.deleteIssuedSubTransaction(transaction, subTransaction)
+                    }
                 )
             }
         }
     }
 }
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RepayOrAddIssuedOnLoanTransactionDialog(
+    onDismiss: () -> Unit,
+    onRepayOrAdd: (Double, String, Boolean) -> Unit,
+    transactionToRepayOrAdd: LoanTransaction,
+    onDeleteSubTransaction: (IssuedSubTransaction) -> Unit
+) {
+    var transactionAmount by remember { mutableStateOf("") }
+    var transactionDate by remember { mutableStateOf(getCurrentDateForIssuedOnLoan()) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var isRepay by remember { mutableStateOf(true) }
+    var showAllTransactions by remember { mutableStateOf(false) }
+    var transactions by remember { mutableStateOf(transactionToRepayOrAdd.transactions.toList()) }
+    var currentAmount by remember { mutableStateOf(transactionToRepayOrAdd.amount) }
+
+    if (showDatePicker) {
+        IssuedOnLoanDatePickerDialog(
+            onDateSelected = { selectedDate ->
+                transactionDate = selectedDate
+                showDatePicker = false
+            }
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = if (isRepay) stringResource(id = R.string.repay_transaction) else stringResource(id = R.string.add_debt),
+                style = TextStyle(color = Color.White)
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    text = "${stringResource(id = R.string.current_amount)}: ${currentAmount.formatIssuedOnLoanAmount(2)}",
+                    style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                TextField(
+                    value = transactionAmount,
+                    onValueChange = { transactionAmount = it },
+                    label = { Text(if (isRepay) stringResource(id = R.string.repayment_amount) else stringResource(id = R.string.add_debt_amount), style = TextStyle(color = Color.White)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    textStyle = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
+                    colors = TextFieldDefaults.textFieldColors(
+                        cursorColor = Color.White,
+                        focusedIndicatorColor = Color.White,
+                        unfocusedIndicatorColor = Color.White,
+                        focusedLabelColor = Color.White,
+                        unfocusedLabelColor = Color.White,
+                        containerColor = Color.Transparent
+                    )
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(id = R.string.transaction_date),
+                    style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                OutlinedButton(
+                    onClick = { showDatePicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                ) {
+                    Text(text = transactionDate, style = TextStyle(color = Color.White))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.repay_transaction),
+                        style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
+                        modifier = Modifier
+                            .clickable { isRepay = true }
+                            .background(if (isRepay) Color.Gray else Color.Transparent)
+                            .padding(8.dp)
+                    )
+                    Text(
+                        text = stringResource(id = R.string.add_debt),
+                        style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
+                        modifier = Modifier
+                            .clickable { isRepay = false }
+                            .background(if (!isRepay) Color.Gray else Color.Transparent)
+                            .padding(8.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = { showAllTransactions = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(id = R.string.view_transactions), color = Color.Green, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+                if (showAllTransactions) {
+                    LazyColumn {
+                        items(transactions) { subTransaction ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "${subTransaction.date}: ${subTransaction.amount.formatIssuedOnLoanAmount(2)}",
+                                    style = TextStyle(color = Color.White)
+                                )
+                                IconButton(onClick = {
+                                    onDeleteSubTransaction(subTransaction)
+                                    transactions = transactions.filter { it != subTransaction }
+                                    currentAmount -= subTransaction.amount
+                                }) {
+                                    Icon(Icons.Default.Delete, contentDescription = stringResource(id = R.string.delete), tint = Color.White)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val transactionAmountValue = transactionAmount.toDoubleOrNull()
+                    if (transactionAmountValue != null) {
+                        onRepayOrAdd(transactionAmountValue, transactionDate, isRepay)
+                    }
+                    onDismiss() // Close the dialog
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFA500)), // Set the button color to yellow
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text(stringResource(id = R.string.ok), style = MaterialTheme.typography.bodyLarge)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(id = R.string.cancel), color = Color.White)
+            }
+        },
+        containerColor = Color.DarkGray
+    )
+}
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
-fun LoanTransactionRow(loanTransaction: LoanTransaction, viewModel: LoanViewModel, selectedCurrency: String, onEdit: (LoanTransaction) -> Unit) {
+fun IssuedOnLoanTransactionRow(
+    issuedOnLoanTransaction: LoanTransaction,
+    viewModel: IssuedOnLoanViewModel,
+    onEdit: (LoanTransaction) -> Unit,
+    onRepayOrAdd: (LoanTransaction) -> Unit,
+    selectedCurrency: String
+) {
     BoxWithConstraints {
         val screenWidth = maxWidth
         val fontSize = if (screenWidth < 360.dp) 14.sp else 18.sp
@@ -295,68 +468,71 @@ fun LoanTransactionRow(loanTransaction: LoanTransaction, viewModel: LoanViewMode
                     )
                 )
                 .clickable {
-                    // Handle click, if needed
+                    onRepayOrAdd(issuedOnLoanTransaction)
                 }
                 .padding(padding)
         ) {
             Column {
                 Text(
-                    text = "${stringResource(id = R.string.amount)}: ${loanTransaction.amount.formatLoanAmount(2)} $selectedCurrency",
+                    text = "${stringResource(id = R.string.amount)}: ${issuedOnLoanTransaction.amount.formatIssuedOnLoanAmount(2)} $selectedCurrency",
                     style = TextStyle(fontSize = fontSize, fontWeight = FontWeight.Bold, color = Color.Red),
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
                 Text(
-                    text = "${stringResource(id = R.string.borrower_name)}: ${loanTransaction.borrowerName}",
+                    text = "${stringResource(id = R.string.borrower_name)}: ${issuedOnLoanTransaction.borrowerName}",
                     style = TextStyle(fontSize = fontSize, fontWeight = FontWeight.SemiBold, color = Color.Red),
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
                 Text(
-                    text = "${stringResource(id = R.string.issue_date)}: ${loanTransaction.issueDate}",
+                    text = "${stringResource(id = R.string.issue_date)}: ${issuedOnLoanTransaction.issueDate}",
                     style = TextStyle(fontSize = fontSize, fontWeight = FontWeight.Normal, color = Color.LightGray),
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
                 Text(
-                    text = "${stringResource(id = R.string.due_date)}: ${loanTransaction.dueDate}",
+                    text = "${stringResource(id = R.string.due_date)}: ${issuedOnLoanTransaction.dueDate}",
                     style = TextStyle(fontSize = fontSize, fontWeight = FontWeight.Normal, color = Color.LightGray),
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
                 Text(
-                    text = "${stringResource(id = R.string.comment)}: ${loanTransaction.comment}",
+                    text = "${stringResource(id = R.string.comment)}: ${issuedOnLoanTransaction.comment}",
                     style = TextStyle(fontSize = fontSize, fontWeight = FontWeight.Normal, color = Color.LightGray),
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
             Row(modifier = Modifier.align(Alignment.TopEnd)) {
-                IconButton(onClick = { onEdit(loanTransaction) }) {
+                IconButton(onClick = { onEdit(issuedOnLoanTransaction) }) {
                     Icon(imageVector = Icons.Default.Edit, contentDescription = stringResource(id = R.string.edit), tint = Color.White)
                 }
-                IconButton(onClick = { viewModel.removeLoanTransaction(loanTransaction) }) {
+                IconButton(onClick = { viewModel.removeLoanTransaction(issuedOnLoanTransaction) }) {
                     Icon(imageVector = Icons.Default.Delete, contentDescription = stringResource(id = R.string.delete), tint = Color.White)
                 }
             }
         }
     }
 }
-fun Double.formatLoanAmount(digits: Int): String {
-    return "%.${digits}f".format(this)
+
+fun Double.formatIssuedOnLoanAmount(digits: Int): String {
+    val formatter = "%,.${digits}f"
+    return formatter.format(this)
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddOrEditLoanTransactionDialog(
+fun AddOrEditIssuedOnLoanTransactionDialog(
     onDismiss: () -> Unit,
     onSave: (LoanTransaction) -> Unit,
     transactionToEdit: LoanTransaction? = null
 ) {
     var amount by remember { mutableStateOf(transactionToEdit?.amount?.toString() ?: "") }
     var borrowerName by remember { mutableStateOf(transactionToEdit?.borrowerName ?: "") }
-    var issueDate by remember { mutableStateOf(transactionToEdit?.issueDate ?: getCurrentDateForLoan()) }
-    var dueDate by remember { mutableStateOf(transactionToEdit?.dueDate ?: getCurrentDateForLoan()) }
+    var issueDate by remember { mutableStateOf(transactionToEdit?.issueDate ?: getCurrentDateForIssuedOnLoan()) }
+    var dueDate by remember { mutableStateOf(transactionToEdit?.dueDate ?: getCurrentDateForIssuedOnLoan()) }
     var comment by remember { mutableStateOf(transactionToEdit?.comment ?: "") }
     var showIssueDatePicker by remember { mutableStateOf(false) }
     var showDueDatePicker by remember { mutableStateOf(false) }
 
     if (showIssueDatePicker) {
-        LoanDatePickerDialog(
+        IssuedOnLoanDatePickerDialog(
             onDateSelected = { selectedDate ->
                 issueDate = selectedDate
                 showIssueDatePicker = false
@@ -365,7 +541,7 @@ fun AddOrEditLoanTransactionDialog(
     }
 
     if (showDueDatePicker) {
-        LoanDatePickerDialog(
+        IssuedOnLoanDatePickerDialog(
             onDateSelected = { selectedDate ->
                 dueDate = selectedDate
                 showDueDatePicker = false
@@ -375,7 +551,7 @@ fun AddOrEditLoanTransactionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(text = if (transactionToEdit != null) stringResource(id = R.string.edit_transaction) else stringResource(id = R.string.add_new_transaction), style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold)) },
+        title = { Text(text = if (transactionToEdit != null) stringResource(id = R.string.edit_transaction) else stringResource(id = R.string.add_new_transaction), style = TextStyle(color = Color.White)) },
         text = {
             Column {
                 TextField(
@@ -473,7 +649,7 @@ fun AddOrEditLoanTransactionDialog(
                         onDismiss()
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC143C)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFA500)),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 shape = RoundedCornerShape(8.dp)
             ) {
@@ -490,7 +666,7 @@ fun AddOrEditLoanTransactionDialog(
 }
 
 @Composable
-fun LoanDatePickerDialog(onDateSelected: (String) -> Unit) {
+fun IssuedOnLoanDatePickerDialog(onDateSelected: (String) -> Unit) {
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
     val year = calendar.get(Calendar.YEAR)
@@ -499,7 +675,7 @@ fun LoanDatePickerDialog(onDateSelected: (String) -> Unit) {
     val datePickerDialog = DatePickerDialog(
         context,
         { _, selectedYear, selectedMonth, selectedDay ->
-            val formattedDate = "${selectedYear}-${selectedMonth + 1}-${selectedDay}"
+            val formattedDate = String.format("%d-%02d-%02d", selectedYear, selectedMonth + 1, selectedDay)
             onDateSelected(formattedDate)
         },
         year, month, day
@@ -509,12 +685,12 @@ fun LoanDatePickerDialog(onDateSelected: (String) -> Unit) {
     }
 }
 
-fun getCurrentDateForLoan(): String {
+fun getCurrentDateForIssuedOnLoan(): String {
     val formatter = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
     return formatter.format(java.util.Date())
 }
 
-class LoanViewModel(application: Application) : AndroidViewModel(application) {
+class IssuedOnLoanViewModel(application: Application) : AndroidViewModel(application) {
     private val _transactions = MutableStateFlow<List<LoanTransaction>>(emptyList())
     val transactions: StateFlow<List<LoanTransaction>> = _transactions
 
@@ -522,7 +698,7 @@ class LoanViewModel(application: Application) : AndroidViewModel(application) {
         loadTransactions(application)
     }
 
-    fun loadTransactions(context: Context) { // Зміна видимості на публічну
+    fun loadTransactions(context: Context) {
         val sharedPreferences = context.getSharedPreferences("LoanPrefs", Context.MODE_PRIVATE)
         val gson = Gson()
         val transactionsJson = sharedPreferences.getString("LoanTransactions", "[]")
@@ -545,9 +721,39 @@ class LoanViewModel(application: Application) : AndroidViewModel(application) {
         saveTransactions(getApplication())
     }
 
+    fun addToLoanTransaction(transaction: LoanTransaction, additionalAmount: Double, transactionDate: String) {
+        _transactions.update { currentList ->
+            currentList.map { it: LoanTransaction ->
+                if (it.id == transaction.id) {
+                    val updatedTransactions = it.transactions.toMutableList()
+                    updatedTransactions.add(IssuedSubTransaction(additionalAmount, transactionDate))
+                    it.copy(amount = it.amount + additionalAmount, transactions = updatedTransactions)
+                } else {
+                    it
+                }
+            }
+        }
+        saveTransactions(getApplication())
+    }
+
     fun updateLoanTransaction(transaction: LoanTransaction) {
         _transactions.update { currentList ->
-            currentList.map { if (it.id == transaction.id) transaction else it }
+            currentList.map {
+                if (it.id == transaction.id) {
+                    val updatedComment = if (transaction.comment.isEmpty()) it.comment else transaction.comment
+                    transaction.copy(comment = updatedComment)
+                } else {
+                    it
+                }
+            }
+        }
+        saveTransactions(getApplication())
+    }
+
+    fun addOrUpdateLoanTransaction(transaction: LoanTransaction) {
+        _transactions.update { currentList ->
+            val updatedList = currentList.filter { it.id != transaction.id }
+            updatedList + transaction
         }
         saveTransactions(getApplication())
     }
@@ -559,22 +765,54 @@ class LoanViewModel(application: Application) : AndroidViewModel(application) {
         saveTransactions(getApplication())
     }
 
+    fun repayLoanTransaction(transaction: LoanTransaction, repaymentAmount: Double, repaymentDate: String) {
+        _transactions.update { currentList ->
+            currentList.map { it: LoanTransaction ->
+                if (it.id == transaction.id) {
+                    val updatedTransactions = it.transactions.toMutableList()
+                    updatedTransactions.add(IssuedSubTransaction(-repaymentAmount, repaymentDate))
+                    it.copy(amount = (it.amount - repaymentAmount).coerceAtLeast(0.0), transactions = updatedTransactions)
+                } else {
+                    it
+                }
+            }
+        }
+        saveTransactions(getApplication())
+    }
+
+    fun deleteIssuedSubTransaction(transaction: LoanTransaction, subTransaction: IssuedSubTransaction) {
+        _transactions.update { currentList ->
+            currentList.map { it: LoanTransaction ->
+                if (it.id == transaction.id) {
+                    val updatedTransactions = it.transactions.toMutableList()
+                    updatedTransactions.remove(subTransaction)
+                    val updatedAmount = it.amount - subTransaction.amount
+                    it.copy(amount = updatedAmount, transactions = updatedTransactions)
+                } else {
+                    it
+                }
+            }
+        }
+        saveTransactions(getApplication())
+    }
+
     fun hasOverdueTransactions(): Boolean {
         val currentDate = Date()
-        return _transactions.value.any { it.dueDate.toLoanDate().before(currentDate) }
+        return _transactions.value.any { it.dueDate.toIssuedOnLoanDate().before(currentDate) }
     }
 }
 
-fun String.toLoanDate(): Date {
+fun String.toIssuedOnLoanDate(): Date {
     val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     return formatter.parse(this) ?: Date()
 }
-class LoanViewModelFactory(
+
+class IssuedOnLoanViewModelFactory(
     private val application: Application
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(LoanViewModel::class.java)) {
-            return LoanViewModel(application) as T
+        if (modelClass.isAssignableFrom(IssuedOnLoanViewModel::class.java)) {
+            return IssuedOnLoanViewModel(application) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
@@ -586,5 +824,11 @@ data class LoanTransaction(
     val issueDate: String,
     val dueDate: String,
     val comment: String,
+    val transactions: MutableList<IssuedSubTransaction> = mutableListOf(),
     val id: UUID = UUID.randomUUID()
+)
+
+data class IssuedSubTransaction(
+    val amount: Double,
+    val date: String
 )
