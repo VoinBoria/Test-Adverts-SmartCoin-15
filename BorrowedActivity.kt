@@ -199,6 +199,7 @@ fun RepayOrAddBorrowedTransactionDialog(
     var isRepay by remember { mutableStateOf(true) }
     var showAllTransactions by remember { mutableStateOf(false) }
     var transactions by remember { mutableStateOf(transactionToRepayOrAdd.transactions.toList()) }
+    var currentAmount by remember { mutableStateOf(transactionToRepayOrAdd.amount) }
 
     if (showDatePicker) {
         BorrowedDatePickerDialog(
@@ -220,7 +221,7 @@ fun RepayOrAddBorrowedTransactionDialog(
         text = {
             Column {
                 Text(
-                    text = "${stringResource(id = R.string.current_amount)}: ${transactionToRepayOrAdd.amount.formatBorrowedAmount(2)}",
+                    text = "${stringResource(id = R.string.current_amount)}: ${currentAmount.formatBorrowedAmount(2)}",
                     style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
@@ -295,6 +296,7 @@ fun RepayOrAddBorrowedTransactionDialog(
                                 IconButton(onClick = {
                                     onDeleteSubTransaction(subTransaction)
                                     transactions = transactions.filter { it != subTransaction }
+                                    currentAmount -= subTransaction.amount
                                 }) {
                                     Icon(Icons.Default.Delete, contentDescription = stringResource(id = R.string.delete), tint = Color.White)
                                 }
@@ -310,10 +312,10 @@ fun RepayOrAddBorrowedTransactionDialog(
                     val transactionAmountValue = transactionAmount.toDoubleOrNull()
                     if (transactionAmountValue != null) {
                         onRepayOrAdd(transactionAmountValue, transactionDate, isRepay)
-                        onDismiss()
                     }
+                    onDismiss() // Close the dialog
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFA500)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFA500)), // Set the button color to yellow
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 shape = RoundedCornerShape(8.dp)
             ) {
@@ -787,7 +789,6 @@ class BorrowedViewModel(application: Application) : AndroidViewModel(application
         return _transactions.value.any { it.dueDate.toDate().before(currentDate) }
     }
 }
-
 
 fun String.toDate(): Date {
     val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
