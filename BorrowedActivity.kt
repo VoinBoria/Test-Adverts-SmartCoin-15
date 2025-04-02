@@ -189,13 +189,16 @@ class BorrowedActivity : ComponentActivity() {
 @Composable
 fun RepayOrAddBorrowedTransactionDialog(
     onDismiss: () -> Unit,
-    onRepayOrAdd: (Double, String, Boolean) -> Unit, // Added a boolean for adding to debt
-    transactionToRepayOrAdd: BorrowedTransaction
+    onRepayOrAdd: (Double, String, Boolean) -> Unit,
+    transactionToRepayOrAdd: BorrowedTransaction,
+    onDeleteSubTransaction: (SubTransaction) -> Unit
 ) {
     var transactionAmount by remember { mutableStateOf("") }
     var transactionDate by remember { mutableStateOf(getCurrentDateForBorrowed()) }
     var showDatePicker by remember { mutableStateOf(false) }
-    var isRepay by remember { mutableStateOf(true) } // State to toggle between repay or add debt
+    var isRepay by remember { mutableStateOf(true) }
+    var showAllTransactions by remember { mutableStateOf(false) }
+    var transactions by remember { mutableStateOf(transactionToRepayOrAdd.transactions.toList()) }
 
     if (showDatePicker) {
         BorrowedDatePickerDialog(
@@ -271,6 +274,34 @@ fun RepayOrAddBorrowedTransactionDialog(
                             .padding(8.dp)
                     )
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = { showAllTransactions = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(id = R.string.view_transactions), color = Color.Green, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+                if (showAllTransactions) {
+                    LazyColumn {
+                        items(transactions) { subTransaction ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "${subTransaction.date}: ${subTransaction.amount.formatBorrowedAmount(2)}",
+                                    style = TextStyle(color = Color.White)
+                                )
+                                IconButton(onClick = {
+                                    onDeleteSubTransaction(subTransaction)
+                                    transactions = transactions.filter { it != subTransaction }
+                                }) {
+                                    Icon(Icons.Default.Delete, contentDescription = stringResource(id = R.string.delete), tint = Color.White)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -308,8 +339,7 @@ fun BorrowedScreen(
     var transactionToEdit by remember { mutableStateOf<BorrowedTransaction?>(null) }
     var transactionToRepayOrAdd by remember { mutableStateOf<BorrowedTransaction?>(null) }
     val transactions by viewModel.transactions.collectAsState()
-
-    val totalBorrowed = transactions.sumOf { it.amount }
+    val totalBorrowed by remember { derivedStateOf { transactions.sumOf { it.amount } } } // Ensure the total updates when transactions change
 
     BoxWithConstraints {
         val screenWidth = maxWidth
@@ -397,7 +427,10 @@ fun BorrowedScreen(
                         }
                         transactionToRepayOrAdd = null
                     },
-                    transactionToRepayOrAdd = transaction
+                    transactionToRepayOrAdd = transaction,
+                    onDeleteSubTransaction = { subTransaction ->
+                        viewModel.deleteSubTransaction(transaction, subTransaction)
+                    }
                 )
             }
         }
@@ -599,7 +632,7 @@ fun AddOrEditBorrowedTransactionDialog(
                 onClick = {
                     val amountValue = amount.toDoubleOrNull()
                     if (amountValue != null) {
-                        onSave(BorrowedTransaction(amountValue, borrowerName, issueDate, dueDate, comment, transactionToEdit?.id ?: UUID.randomUUID()))
+                        onSave(BorrowedTransaction(amountValue, borrowerName, issueDate, dueDate, comment, transactionToEdit?.transactions ?: mutableListOf(), transactionToEdit?.id ?: UUID.randomUUID()))
                         onDismiss()
                     }
                 },
@@ -673,13 +706,17 @@ class BorrowedViewModel(application: Application) : AndroidViewModel(application
         }
         saveTransactions(getApplication())
     }
+
     fun addToBorrowedTransaction(transaction: BorrowedTransaction, additionalAmount: Double, transactionDate: String) {
         _transactions.update { currentList ->
             currentList.map { it: BorrowedTransaction ->
-                if (it.id == transaction.id)
-                    it.copy(amount = it.amount + additionalAmount, comment = "${it.comment}\nAdditional debt of $additionalAmount on $transactionDate")
-                else
+                if (it.id == transaction.id) {
+                    val updatedTransactions = it.transactions.toMutableList()
+                    updatedTransactions.add(SubTransaction(additionalAmount, transactionDate))
+                    it.copy(amount = it.amount + additionalAmount, transactions = updatedTransactions)
+                } else {
                     it
+                }
             }
         }
         saveTransactions(getApplication())
@@ -689,7 +726,6 @@ class BorrowedViewModel(application: Application) : AndroidViewModel(application
         _transactions.update { currentList ->
             currentList.map {
                 if (it.id == transaction.id) {
-                    // Оновлення транзакції зі збереженням існуючих коментарів, якщо вони не змінювались
                     val updatedComment = if (transaction.comment.isEmpty()) it.comment else transaction.comment
                     transaction.copy(comment = updatedComment)
                 } else {
@@ -699,9 +735,9 @@ class BorrowedViewModel(application: Application) : AndroidViewModel(application
         }
         saveTransactions(getApplication())
     }
+
     fun addOrUpdateBorrowedTransaction(transaction: BorrowedTransaction) {
         _transactions.update { currentList ->
-            // Видалення дублікатів перед додаванням або оновленням
             val updatedList = currentList.filter { it.id != transaction.id }
             updatedList + transaction
         }
@@ -718,10 +754,29 @@ class BorrowedViewModel(application: Application) : AndroidViewModel(application
     fun repayBorrowedTransaction(transaction: BorrowedTransaction, repaymentAmount: Double, repaymentDate: String) {
         _transactions.update { currentList ->
             currentList.map { it: BorrowedTransaction ->
-                if (it.id == transaction.id)
-                    it.copy(amount = (it.amount - repaymentAmount).coerceAtLeast(0.0), comment = "${it.comment}\nRepayment of $repaymentAmount on $repaymentDate")
-                else
+                if (it.id == transaction.id) {
+                    val updatedTransactions = it.transactions.toMutableList()
+                    updatedTransactions.add(SubTransaction(-repaymentAmount, repaymentDate))
+                    it.copy(amount = (it.amount - repaymentAmount).coerceAtLeast(0.0), transactions = updatedTransactions)
+                } else {
                     it
+                }
+            }
+        }
+        saveTransactions(getApplication())
+    }
+
+    fun deleteSubTransaction(transaction: BorrowedTransaction, subTransaction: SubTransaction) {
+        _transactions.update { currentList ->
+            currentList.map { it: BorrowedTransaction ->
+                if (it.id == transaction.id) {
+                    val updatedTransactions = it.transactions.toMutableList()
+                    updatedTransactions.remove(subTransaction)
+                    val updatedAmount = it.amount - subTransaction.amount
+                    it.copy(amount = updatedAmount, transactions = updatedTransactions)
+                } else {
+                    it
+                }
             }
         }
         saveTransactions(getApplication())
@@ -732,6 +787,7 @@ class BorrowedViewModel(application: Application) : AndroidViewModel(application
         return _transactions.value.any { it.dueDate.toDate().before(currentDate) }
     }
 }
+
 
 fun String.toDate(): Date {
     val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -755,5 +811,12 @@ data class BorrowedTransaction(
     val issueDate: String,
     val dueDate: String,
     val comment: String,
+    val transactions: MutableList<SubTransaction> = mutableListOf(),
     val id: UUID = UUID.randomUUID()
+)
+
+
+data class SubTransaction(
+    val amount: Double,
+    val date: String
 )
