@@ -185,6 +185,11 @@ class BorrowedActivity : ComponentActivity() {
         }
     }
 }
+fun Double.formatAmountWithCommas(digits: Int): String {
+    val formatter = "%,.${digits}f"
+    return formatter.format(this)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RepayOrAddBorrowedTransactionDialog(
@@ -221,7 +226,7 @@ fun RepayOrAddBorrowedTransactionDialog(
         text = {
             Column {
                 Text(
-                    text = "${stringResource(id = R.string.current_amount)}: ${currentAmount.formatBorrowedAmount(2)}",
+                    text = "${stringResource(id = R.string.current_amount)}: ${currentAmount.formatAmountWithCommas(2)}",
                     style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold),
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
@@ -290,7 +295,7 @@ fun RepayOrAddBorrowedTransactionDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "${subTransaction.date}: ${subTransaction.amount.formatBorrowedAmount(2)}",
+                                    text = "${subTransaction.date}: ${subTransaction.amount.formatAmountWithCommas(2)}",
                                     style = TextStyle(color = Color.White)
                                 )
                                 IconButton(onClick = {
@@ -309,7 +314,7 @@ fun RepayOrAddBorrowedTransactionDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val transactionAmountValue = transactionAmount.toDoubleOrNull()
+                    val transactionAmountValue = transactionAmount.replace(",", "").toDoubleOrNull() // Remove commas before converting
                     if (transactionAmountValue != null) {
                         onRepayOrAdd(transactionAmountValue, transactionDate, isRepay)
                     }
@@ -477,7 +482,7 @@ fun BorrowedTransactionRow(
         ) {
             Column {
                 Text(
-                    text = "${stringResource(id = R.string.amount)}: ${borrowedTransaction.amount.formatBorrowedAmount(2)} $selectedCurrency",
+                    text = "${stringResource(id = R.string.amount)}: ${borrowedTransaction.amount.formatAmountWithCommas(2)} $selectedCurrency",
                     style = TextStyle(fontSize = fontSize, fontWeight = FontWeight.Bold, color = Color.Yellow),
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
